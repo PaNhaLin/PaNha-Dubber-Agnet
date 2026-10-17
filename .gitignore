@@ -1,0 +1,14 @@
+.env
+.env.local
+.env.production
+node_modules/
+data/
+uploads/
+exports/
+*.log
+.DS_Store
+*.mp4
+*.mov
+*.mkv
+*.mp3
+*.wav

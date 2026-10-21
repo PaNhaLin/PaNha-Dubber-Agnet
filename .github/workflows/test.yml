@@ -17,5 +17,9 @@ jobs:
           node --check public/app.js
           node --check public/voxcpm2-engine.js
           node --check scripts/install-voxcpm-runtime.mjs
+      - name: Install upstream browser runtime (without model weights)
+        run: |
+          npm run webgpu:install
+          node --check public/voxcpm2/runtime/voxcpm_rs.js
       - name: Node tests
         run: npm test

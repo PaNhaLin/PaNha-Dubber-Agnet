@@ -12,3 +12,6 @@ exports/
 *.mkv
 *.mp3
 *.wav
+
+# Downloaded upstream WASM/JS runtime; never commit binaries
+/public/voxcpm2/runtime/

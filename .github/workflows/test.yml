@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+    branches: [main, feature/voxcpm2-browser-webgpu]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check server.mjs
+          node --check public/app.js
+          node --check public/voxcpm2-engine.js
+          node --check scripts/install-voxcpm-runtime.mjs
+      - name: Install upstream browser runtime (without model weights)
+        run: |
+          npm run webgpu:install
+          node --check public/voxcpm2/runtime/voxcpm_rs.js
+      - name: Node tests
+        run: npm test

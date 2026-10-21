@@ -74,6 +74,41 @@ async function busy(button,fn){button.disabled=true;const old=button.textContent
 function showExport(open){$('export-modal').classList.toggle('hidden',!open);if(open)$('job-progress').classList.add('hidden')}
 async function exportMovie(){if(!videoFile)throw Error('Please import a local video first.');saveEditor(true);const assetId=await assureVideoUploaded();const resp=await request('/api/render',{method:'POST',body:{videoAssetId:assetId,cues:cues(),resolution:$('export-res').value,originalVolume:project.originalVolume}});const jobId=resp.jobId;const box=$('job-progress');box.classList.remove('hidden');$('confirm-export').disabled=true;$('cancel-export').disabled=true;try{for(let i=0;i<720;i++){await new Promise(r=>setTimeout(r,2500));const job=await request('/api/jobs/'+jobId);box.textContent=job.status==='done'?'Export complete. Download starting…':job.progress+'…';if(job.status==='error')throw Error(job.progress);if(job.status==='done'){const target=job.downloadUrl+(password?'?protected=1':'');const res=await fetch(target,{headers:apiPasswordHeader()});if(!res.ok)throw Error('Unable to download rendered video');const blob=await res.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filenameFor('mp4');a.click();setTimeout(()=>URL.revokeObjectURL(url),6000);showExport(false);toast('MP4 video rendered and downloaded successfully');return}}throw Error('Export is still processing. Please keep your source video and try checking again later.')}finally{$('confirm-export').disabled=false;$('cancel-export').disabled=false}}
 async function checkStatus(){try{const status=await request('/api/status');$('status-pill').textContent='● Server online';$('status-pill').style.borderColor='#267b6e';$('server-status-text').textContent=`Server: online • Media/FFmpeg: available • AI: ${status.aiConfigured?'provider settings present (not connectivity-tested)':'not configured'} • Access password: ${status.passwordRequired?'enabled':'disabled'}`;$('footer-status').textContent='Server online · Ready'}catch(e){$('status-pill').textContent='● Offline';$('server-status-text').textContent=`Unable to reach studio server: ${e.message}`;toast('Backend is not reachable. You can still edit and export SRT/project files.',true)}}
+
+let webgpuEnginePromise;
+const getWebgpuEngine=()=>webgpuEnginePromise??=(import('/voxcpm2-engine.js').catch(error=>{webgpuEnginePromise=undefined;throw error}));
+async function webgpuVoiceSelection(){
+ const enabled=$('voice-select').value==='voxcpm2-webgpu';
+ $('webgpu-voice-panel').classList.toggle('hidden',!enabled);
+ if(!enabled)return;
+ try{
+  const engine=await getWebgpuEngine();
+  const [gpu,runtime]=await Promise.all([engine.inspectWebGpu(),engine.inspectRuntime()]);
+  $('webgpu-compat').textContent='GPU: '+gpu.adapter+' · '+gpu.reason;
+  $('webgpu-runtime').textContent=runtime.detail;
+  $('load-webgpu-voice').disabled=!gpu.supported||!runtime.installed||engine.isModelReady();
+  if(engine.isModelReady())$('webgpu-status').textContent='Model loaded. Generate a line with WebGPU.';
+ }catch(error){$('webgpu-status').textContent=error.message}
+}
+async function loadWebgpuVoice(){
+ const button=$('load-webgpu-voice');
+ if(!confirm('Load around 2.45 GiB of VoxCPM2 model files from Hugging Face into this browser? It may need more than 5 GiB GPU memory and can fail on Intel integrated graphics.'))return;
+ await busy(button,async()=>{
+  const engine=await getWebgpuEngine();
+  const progress=$('webgpu-progress');
+  progress.classList.remove('hidden');
+  const info=await engine.loadModel((stage,current,total)=>{
+    $('webgpu-status').textContent=stage;
+    progress.value=total>0?Math.min(100,current/total*100):0;
+  });
+  progress.value=100;
+  $('webgpu-status').textContent='Ready: '+info.sampleRate+' Hz, '+(info.residentMiB/1024).toFixed(2)+' GiB reported resident.';
+  $('webgpu-runtime').textContent='WebAssembly/WebGPU model initialized.';
+  toast('VoxCPM2 model loaded locally. You can generate Khmer audio.');
+ });
+ await webgpuVoiceSelection();
+}
+
 function startup(){restore();render();if(videoFile)loadVideoForEpisode();$('studio-password').value=password;checkStatus();requestAnimationFrame(renderTime);
  $('import-video').onclick=()=>$('video-input').click();$('video-input').onchange=e=>{const f=e.target.files[0];if(!f)return;videoFile=f;videoFiles.set(project.currentEpisode,f);videoAssetId='';videoAssets.delete(project.currentEpisode);if(videoUrl)URL.revokeObjectURL(videoUrl);videoUrl=URL.createObjectURL(f);video.src=videoUrl;video.load();$('stage').classList.add('has-video');$('filename-status').textContent=f.name;$('video-block').textContent=f.name;toast('Local video imported. It has not been uploaded to the server.');render()};video.onloadedmetadata=()=>{if(Number.isFinite(video.duration)&&video.duration>0){ep().duration=video.duration;save();renderTimeline();renderTime()}};
  video.ontimeupdate=()=>{now=video.currentTime;renderTime()};video.onplay=()=>{playing=true;renderTime()};video.onpause=()=>{playing=false;renderTime()};video.onended=()=>{playing=false;renderTime()};$('play').onclick=togglePlay;$('large-play').onclick=togglePlay;$('skip-back').onclick=()=>seekTo(now-5);$('skip-forward').onclick=()=>seekTo(now+5);$('scrub').oninput=e=>seekTo(e.target.value);$('subtitle-toggle').onclick=e=>{showSubtitles=!showSubtitles;e.target.classList.toggle('active',showSubtitles);renderCaption()};$('subtitle-track').onclick=e=>{if(e.target===$('subtitle-track')){const r=e.target.getBoundingClientRect();seekTo((e.clientX-r.left)/r.width*duration())}};
@@ -85,7 +120,8 @@ function startup(){restore();render();if(videoFile)loadVideoForEpisode();$('stud
  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>changeTab(b.dataset.tab));document.querySelectorAll('.navitem').forEach(b=>b.onclick=()=>{const n=b.dataset.nav;changeTab(n==='subtitles'?'dialogue':n==='studio'?'dialogue':n);document.querySelectorAll('.navitem').forEach(x=>x.classList.toggle('active',x===b))});
  $('voice-volume').oninput=e=>{const c=cues()[selected];if(!c)return;c.voiceVolume=Number(e.target.value)/100;$('voice-volume-label').textContent=e.target.value+'%';save()};$('preview-browser-voice').onclick=()=>{const c=cues()[selected];if(!c)return;if(!('speechSynthesis'in window)){toast('Browser speech engine not available',true);return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(c.khmer||c.original);u.lang='km-KH';speechSynthesis.speak(u);toast('Using your browser voice; Khmer quality depends on installed system voices.')};
  $('import-voice').onclick=()=>$('voice-input').click();$('voice-input').onchange=async e=>{const f=e.target.files[0];if(!f)return;await busy($('import-voice'),async()=>{const a=await uploadFile(f,'audio');cues()[selected].voiceAssetId=a;fillEditor();renderCues();toast('Recorded audio attached to selected line. It will be mixed into MP4 export.')})};
- $('generate-voice').onclick=()=>busy($('generate-voice'),async()=>{const c=cues()[selected];if(!c)throw Error('Add a dialogue first');const text=$('khmer-text').value.trim();if(!text)throw Error('Enter Khmer dialogue first');saveEditor(true);const out=await request('/api/tts',{method:'POST',body:{text,voice:$('voice-select').value}});c.voiceAssetId=out.assetId;fillEditor();renderCues();toast('AI voice generated. Press Play on the audio control to preview.')});
+ $('voice-select').onchange=()=>{void webgpuVoiceSelection()};$('load-webgpu-voice').onclick=()=>{void loadWebgpuVoice()};
+ $('generate-voice').onclick=()=>busy($('generate-voice'),async()=>{const c=cues()[selected];if(!c)throw Error('Add a dialogue first');const text=$('khmer-text').value.trim();if(!text)throw Error('Enter Khmer dialogue first');saveEditor(true);if($('voice-select').value==='voxcpm2-webgpu'){const engine=await getWebgpuEngine();if(!engine.isModelReady())throw Error('Press Load on-device model first. Or choose an existing server voice.');$('webgpu-status').textContent='Generating Khmer speech with the local GPU…';const result=await engine.synthesize(text);const file=new File([result.wav],'panha-voxcpm2.wav',{type:'audio/wav'});c.voiceAssetId=await uploadFile(file,'audio');$('webgpu-status').textContent='Generated '+result.audioSeconds.toFixed(1)+'s audio in '+result.generationSeconds.toFixed(1)+'s. WAV attached to this dialogue.';}else{const out=await request('/api/tts',{method:'POST',body:{text,voice:$('voice-select').value}});c.voiceAssetId=out.assetId;}save();fillEditor();renderCues();toast('Voice generated and attached. Preview it or export the dubbed MP4.')});
  $('translate-selected').onclick=()=>busy($('translate-selected'),async()=>{const c=cues()[selected];if(!c||!$('original-text').value.trim())throw Error('Select a line with original dialogue');saveEditor(true);const {translations}=await request('/api/translate',{method:'POST',body:{lines:[c.original],sourceLanguage:$('source-language').value}});c.khmer=translations[0];fillEditor();renderCues();renderCaption();save();toast('Selected dialogue translated to Khmer')});
  $('translate-all').onclick=()=>busy($('translate-all'),async()=>{saveEditor(true);const arr=cues().filter(c=>c.original?.trim());if(!arr.length)throw Error('No original dialogue to translate');for(let i=0;i<arr.length;i+=40){const batch=arr.slice(i,i+40);const {translations}=await request('/api/translate',{method:'POST',body:{lines:batch.map(x=>x.original),sourceLanguage:$('source-language').value}});batch.forEach((c,j)=>c.khmer=translations[j])}fillEditor();renderCues();renderCaption();save();toast(`Translated ${arr.length} lines to Khmer`)});
  $('transcribe-video').onclick=()=>busy($('transcribe-video'),async()=>{const id=await assureVideoUploaded();const out=await request('/api/transcribe',{method:'POST',body:{videoAssetId:id}});if(out.segments?.length){ep().cues=out.segments.map(x=>({...x,voiceAssetId:'',voiceVolume:1}));selected=0;render();save();toast(`${out.segments.length} timed transcription segments imported`)}else if(out.text){const start=Math.max(0,Math.min(now,duration()-1));cues().push({start,end:Math.min(duration(),start+8),original:out.text,khmer:'',speaker:'Speaker 1',voiceAssetId:'',voiceVolume:1});selected=cues().length-1;render();save();toast('Transcript imported as one dialogue line; edit timing before export.')}else throw Error('Transcription provider returned no text')});
@@ -93,3 +129,4 @@ function startup(){restore();render();if(videoFile)loadVideoForEpisode();$('stud
  $('export-top').onclick=()=>showExport(true);$('export-side').onclick=()=>showExport(true);$('close-export').onclick=()=>showExport(false);$('cancel-export').onclick=()=>showExport(false);$('export-modal').onclick=e=>{if(e.target===$('export-modal'))showExport(false)};$('confirm-export').onclick=()=>busy($('confirm-export'),exportMovie);
 }
 startup();
+void webgpuVoiceSelection();

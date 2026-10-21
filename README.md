@@ -2,6 +2,10 @@
 
 This is a **functional, deployable web MVP**, not the earlier in-chat visual prototype. It uses a standalone Node.js 20+ HTTP server, a responsive video/timeline editor in the browser, and FFmpeg for server-side rendering. It is an independent implementation inspired by the requested workflow, **not an exact copy** of DAI Dubber Pro or the user's existing unpublished localhost source.
 
+## Experimental VoxCPM2 WebGPU voice
+
+The Voice tab can now generate Khmer speech using an opt-in browser-local WebGPU VoxCPM2 runtime; generated WAV can be attached to the dubbed video timeline. Run npm run webgpu:install before npm start on local Windows, or use the Docker build which installs the WASM runtime. Model weights (~2.45 GiB) download only after pressing Load; peak GPU memory can exceed 5 GiB and Intel integrated GPUs have not been verified. See [WebGPU setup and limitations](docs/WEBGPU_INTEGRATION.md). Other speech providers remain available.
+
 ## Working features
 
 - Import local videos to preview without uploading them to the server.
@@ -16,7 +20,7 @@ This is a **functional, deployable web MVP**, not the earlier in-chat visual pro
 
 ## What still requires work
 
-Realistic multilingual speaker diarization, vocal/music separation, frame-accurate waveform editing, automatic lip sync, VoxCPM2-specific integration, and reliable automatic Khmer dubbing are **not** implemented. Providers require credentials or a configured local model server. AI endpoints must support `/chat/completions`, `/audio/transcriptions`, and `/audio/speech`; support varies by gateway. The browser voice preview is not an audio file and is not rendered into exports.
+Realistic multilingual speaker diarization, vocal/music separation, frame-accurate waveform editing, automatic lip sync, and reliable automatic Khmer dubbing are **not** implemented. An **experimental browser-local VoxCPM2 WebGPU voice option** is integrated, but its GPU and model-download behavior has not yet been validated on Intel integrated graphics; see [docs/WEBGPU_INTEGRATION.md](docs/WEBGPU_INTEGRATION.md). Providers require credentials or a configured local model server. AI endpoints must support `/chat/completions`, `/audio/transcriptions`, and `/audio/speech`; support varies by gateway. The browser voice preview is not an audio file and is not rendered into exports.
 
 ## Run on Windows
 

@@ -77,12 +77,12 @@ async function renderJob(job,body){try{
  job.progress='Rendering video using FFmpeg';await run('ffmpeg',args,{timeout:900000});
  const stat=await fsp.stat(result);job.status='done';job.progress='Complete';job.bytes=stat.size;job.file=result;
  }catch(e){job.status='error';job.progress=e.message.slice(0,700);console.error('Render failed:',job.progress)}}
-const types={'.html':'text/html','.css':'text/css','.js':'application/javascript','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
-async function serveStatic(res,pathname){let urlPath=pathname==='/'?'/index.html':pathname;let file=path.resolve(PUBLIC,'.'+decodeURIComponent(urlPath));if(!file.startsWith(PUBLIC+path.sep))return error(res,403,'Forbidden');try{const st=await fsp.stat(file);if(!st.isFile())throw Error('not file');res.writeHead(200,{'Content-Type':(types[path.extname(file)]||'application/octet-stream')+'; charset=utf-8','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res)}catch{error(res,404,'Not found')}}
+const types={'.html':'text/html','.css':'text/css','.js':'application/javascript','.wasm':'application/wasm','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
+async function serveStatic(res,pathname){let urlPath=pathname==='/'?'/index.html':pathname;let file=path.resolve(PUBLIC,'.'+decodeURIComponent(urlPath));if(!file.startsWith(PUBLIC+path.sep))return error(res,403,'Forbidden');try{const st=await fsp.stat(file);if(!st.isFile())throw Error('not file');res.writeHead(200,{'Content-Type':(types[path.extname(file)]||'application/octet-stream')+(path.extname(file)==='.wasm'?'':'; charset=utf-8'),'Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res)}catch{error(res,404,'Not found')}}
 function sendDownload(res,file,name,contentType){res.writeHead(200,{'Content-Type':contentType,'Content-Disposition':`attachment; filename="${name}"`,'Cache-Control':'private, no-store'});fs.createReadStream(file).pipe(res)}
 async function handle(req,res){try{
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
- res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'");
+ res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://*.xethub.hf.co; object-src 'none'; frame-ancestors 'none'");
  const url=new URL(req.url,'http://localhost');const pn=url.pathname;
  if(pn==='/healthz'&&req.method==='GET')return json(res,200,{ok:true});
  if(!authorized(req)){res.setHeader('WWW-Authenticate','Basic realm="PaNha Dubber Studio Pro", charset="UTF-8"');return error(res,401,'Sign in with username studio and your private studio password.');}

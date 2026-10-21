@@ -32,8 +32,8 @@ for (const file of files) {
   if (file.name.endsWith('.wasm') && data.subarray(0, 4).toString('hex') !== '0061736d') {
     throw new Error('Invalid WebAssembly file signature.');
   }
-  if (file.name.endsWith('.js') && !data.toString('utf8', 0, 6000).includes('WebAssembly')) {
-    throw new Error('Runtime JavaScript does not look like the expected WebAssembly loader.');
+  if (file.name.endsWith('.js') && !/\bload_model\b/.test(data.toString('utf8'))) {
+    throw new Error('Runtime JavaScript does not expose the expected model loader.');
   }
   const hash = createHash('sha256').update(data).digest('hex');
   const expected = process.env[file.name.endsWith('.wasm') ? 'VOXCPM_WASM_SHA256' : 'VOXCPM_JS_SHA256'];
